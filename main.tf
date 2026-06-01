@@ -1,71 +1,84 @@
-# IAM Role for EKS Control Plane
-resource "aws_iam_role" "eks_cluster" {
-  name = "${var.cluster_name}-cluster-role"
+# Random passwords for databases
+resource "random_password" "mysql" {
+  length           = 16
+  special          = true
+  override_special = "!#$%^&*"
+}
 
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
-      Principal = {
-        Service = "eks.amazonaws.com"
-      }
-    }]
+resource "random_password" "postgres" {
+  length           = 16
+  special          = true
+  override_special = "!#$%^&*"
+}
+
+# Store MySQL credentials in Secrets Manager
+resource "aws_secretsmanager_secret" "mysql" {
+  name                    = "project-bedrock/mysql-credentials"
+  recovery_window_in_days = 0
+
+  tags = {
+    Name = "project-bedrock-mysql-secret"
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "mysql" {
+  secret_id = aws_secretsmanager_secret.mysql.id
+  secret_string = jsonencode({
+    username = "admin"
+    password = random_password.mysql.result
+    dbname   = "retaildb"
   })
 }
 
-resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
-  role       = aws_iam_role.eks_cluster.name
+# Store PostgreSQL credentials in Secrets Manager
+resource "aws_secretsmanager_secret" "postgres" {
+  name                    = "project-bedrock/postgres-credentials"
+  recovery_window_in_days = 0
+
+  tags = {
+    Name = "project-bedrock-postgres-secret"
+  }
 }
 
-# IAM Role for EKS Node Group
-resource "aws_iam_role" "eks_nodes" {
-  name = "${var.cluster_name}-node-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
-      Principal = {
-        Service = "ec2.amazonaws.com"
-      }
-    }]
+resource "aws_secretsmanager_secret_version" "postgres" {
+  secret_id = aws_secretsmanager_secret.postgres.id
+  secret_string = jsonencode({
+    username = "dbadmin"
+    password = random_password.postgres.result
+    dbname   = "retaildb"
   })
 }
 
-resource "aws_iam_role_policy_attachment" "eks_worker_node_policy" {
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
-  role       = aws_iam_role.eks_nodes.name
+# RDS Subnet Group
+resource "aws_db_subnet_group" "main" {
+  name       = "project-bedrock-db-subnet-group"
+  subnet_ids = var.subnet_ids
+
+  tags = {
+    Name = "project-bedrock-db-subnet-group"
+  }
 }
 
-resource "aws_iam_role_policy_attachment" "eks_cni_policy" {
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
-  role       = aws_iam_role.eks_nodes.name
-}
-
-resource "aws_iam_role_policy_attachment" "eks_ecr_policy" {
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
-  role       = aws_iam_role.eks_nodes.name
-}
-
-resource "aws_iam_role_policy_attachment" "eks_cloudwatch_policy" {
-  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
-  role       = aws_iam_role.eks_nodes.name
-}
-
-# Security Group for EKS Nodes
-resource "aws_security_group" "eks_nodes" {
-  name        = "${var.cluster_name}-node-sg"
-  description = "Security group for EKS worker nodes"
+# Security Group for RDS
+resource "aws_security_group" "rds" {
+  name        = "project-bedrock-rds-sg"
+  description = "Security group for RDS instances"
   vpc_id      = var.vpc_id
 
   ingress {
-    from_port = 0
-    to_port   = 0
-    protocol  = "-1"
-    self      = true
+    description     = "MySQL from EKS nodes"
+    from_port       = 3306
+    to_port         = 3306
+    protocol        = "tcp"
+    security_groups = [var.eks_node_sg_id]
+  }
+
+  ingress {
+    description     = "PostgreSQL from EKS nodes"
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [var.eks_node_sg_id]
   }
 
   egress {
@@ -76,69 +89,52 @@ resource "aws_security_group" "eks_nodes" {
   }
 
   tags = {
-    Name = "${var.cluster_name}-node-sg"
+    Name = "project-bedrock-rds-sg"
   }
 }
 
-# EKS Cluster
-resource "aws_eks_cluster" "main" {
-  name     = var.cluster_name
-  role_arn = aws_iam_role.eks_cluster.arn
-  version  = "1.31"
+# MySQL RDS Instance
+resource "aws_db_instance" "mysql" {
+  identifier        = "project-bedrock-mysql"
+  engine            = "mysql"
+  engine_version    = "8.0"
+  instance_class    = "db.t3.micro"
+  allocated_storage = 20
 
-  vpc_config {
-    subnet_ids              = var.subnet_ids
-    endpoint_private_access = true
-    endpoint_public_access  = true
-    security_group_ids      = [aws_security_group.eks_nodes.id]
+  db_name  = "retaildb"
+  username = "admin"
+  password = random_password.mysql.result
+
+  db_subnet_group_name   = aws_db_subnet_group.main.name
+  vpc_security_group_ids = [aws_security_group.rds.id]
+
+  skip_final_snapshot = true
+  multi_az            = false
+
+  tags = {
+    Name = "project-bedrock-mysql"
   }
-
-  enabled_cluster_log_types = [
-    "api",
-    "audit",
-    "authenticator",
-    "controllerManager",
-    "scheduler"
-  ]
-
-  depends_on = [
-    aws_iam_role_policy_attachment.eks_cluster_policy
-  ]
 }
 
-# EKS Node Group
-resource "aws_eks_node_group" "main" {
-  cluster_name    = aws_eks_cluster.main.name
-  node_group_name = "${var.cluster_name}-node-group"
-  node_role_arn   = aws_iam_role.eks_nodes.arn
-  subnet_ids      = var.subnet_ids
+# PostgreSQL RDS Instance
+resource "aws_db_instance" "postgres" {
+  identifier        = "project-bedrock-postgres"
+  engine            = "postgres"
+  engine_version    = "15"
+  instance_class    = "db.t3.micro"
+  allocated_storage = 20
 
-  instance_types = ["t3.small"]
+  db_name  = "retaildb"
+  username = "dbadmin"
+  password = random_password.postgres.result
 
-  scaling_config {
-    desired_size = 1
-    min_size     = 1
-    max_size     = 2
+  db_subnet_group_name   = aws_db_subnet_group.main.name
+  vpc_security_group_ids = [aws_security_group.rds.id]
+
+  skip_final_snapshot = true
+  multi_az            = false
+
+  tags = {
+    Name = "project-bedrock-postgres"
   }
-
-  update_config {
-    max_unavailable = 1
-  }
-
-  depends_on = [
-    aws_iam_role_policy_attachment.eks_worker_node_policy,
-    aws_iam_role_policy_attachment.eks_cni_policy,
-    aws_iam_role_policy_attachment.eks_ecr_policy,
-  ]
-}
-
-# OIDC Provider for EKS
-data "tls_certificate" "eks" {
-  url = aws_eks_cluster.main.identity[0].oidc[0].issuer
-}
-
-resource "aws_iam_openid_connect_provider" "eks" {
-  client_id_list  = ["sts.amazonaws.com"]
-  thumbprint_list = [data.tls_certificate.eks.certificates[0].sha1_fingerprint]
-  url             = aws_eks_cluster.main.identity[0].oidc[0].issuer
 }
