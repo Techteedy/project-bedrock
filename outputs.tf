@@ -1,9 +1,9 @@
-output "carts_table_name" {
-  description = "DynamoDB carts table name"
-  value       = aws_dynamodb_table.carts.name
+output "bucket_name" {
+  description = "Assets S3 bucket name"
+  value       = aws_s3_bucket.assets.bucket
 }
 
-output "orders_table_name" {
-  description = "DynamoDB orders table name"
-  value       = aws_dynamodb_table.orders.name
+output "lambda_function_name" {
+  description = "Lambda function name"
+  value       = aws_lambda_function.asset_processor.function_name
 }
