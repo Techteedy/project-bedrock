@@ -1,9 +1,14 @@
-variable "vpc_name" {
-  description = "Name of the VPC"
+variable "cluster_name" {
+  description = "EKS cluster name"
   type        = string
 }
 
-variable "region" {
-  description = "AWS region"
+variable "vpc_id" {
+  description = "VPC ID"
   type        = string
+}
+
+variable "subnet_ids" {
+  description = "Private subnet IDs for EKS"
+  type        = list(string)
 }
