@@ -1,0 +1,23 @@
+variable "aws_region" {
+  description = "AWS region"
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "cluster_name" {
+  description = "EKS cluster name"
+  type        = string
+  default     = "project-bedrock-cluster"
+}
+
+variable "vpc_name" {
+  description = "VPC name"
+  type        = string
+  default     = "project-bedrock-vpc"
+}
+
+variable "student_id" {
+  description = "Student ID for unique resource naming"
+  type        = string
+  default     = "altso025-3686"
+}
