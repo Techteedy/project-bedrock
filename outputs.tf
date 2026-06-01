@@ -1,9 +1,26 @@
-output "bucket_name" {
-  description = "Assets S3 bucket name"
-  value       = aws_s3_bucket.assets.bucket
+output "dev_user_name" {
+  description = "Developer IAM username"
+  value       = aws_iam_user.dev_view.name
 }
 
-output "lambda_function_name" {
-  description = "Lambda function name"
-  value       = aws_lambda_function.asset_processor.function_name
+output "dev_user_arn" {
+  description = "Developer IAM user ARN"
+  value       = aws_iam_user.dev_view.arn
+}
+
+output "dev_access_key_id" {
+  description = "Developer IAM access key ID"
+  value       = aws_iam_access_key.dev_view.id
+}
+
+output "dev_secret_access_key" {
+  description = "Developer IAM secret access key"
+  value       = aws_iam_access_key.dev_view.secret
+  sensitive   = true
+}
+
+output "dev_console_password" {
+  description = "Developer console login password"
+  value       = aws_iam_user_login_profile.dev_view.password
+  sensitive   = true
 }
