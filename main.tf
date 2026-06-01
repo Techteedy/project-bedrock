@@ -1,42 +1,36 @@
-# IAM User for developer read-only access
-resource "aws_iam_user" "dev_view" {
-  name = "bedrock-dev-view"
+# CloudWatch Log Group for EKS control plane
+resource "aws_cloudwatch_log_group" "eks" {
+  name              = "/aws/eks/${var.cluster_name}/cluster"
+  retention_in_days = 7
 
   tags = {
-    Name = "bedrock-dev-view"
+    Name = "${var.cluster_name}-log-group"
   }
 }
 
-# Attach AWS ReadOnlyAccess managed policy
-resource "aws_iam_user_policy_attachment" "readonly" {
-  user       = aws_iam_user.dev_view.name
-  policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
+# CloudWatch Log Group for application containers
+resource "aws_cloudwatch_log_group" "app" {
+  name              = "/aws/eks/${var.cluster_name}/retail-app"
+  retention_in_days = 7
+
+  tags = {
+    Name = "${var.cluster_name}-app-log-group"
+  }
 }
 
-# Allow dev user to upload to assets bucket
-resource "aws_iam_user_policy" "s3_putobject" {
-  name = "bedrock-dev-s3-putobject"
-  user = aws_iam_user.dev_view.name
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = "s3:PutObject"
-        Resource = "arn:aws:s3:::bedrock-assets-${var.student_id}/*"
-      }
-    ]
-  })
+# IAM Policy for CloudWatch Observability addon
+resource "aws_iam_role_policy_attachment" "cloudwatch_observability" {
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+  role       = var.eks_node_role_name
 }
 
-# Console login profile (password for AWS console)
-resource "aws_iam_user_login_profile" "dev_view" {
-  user                    = aws_iam_user.dev_view.name
-  password_reset_required = false
-}
+# EKS CloudWatch Observability Addon
+resource "aws_eks_addon" "cloudwatch_observability" {
+  cluster_name             = var.cluster_name
+  addon_name               = "amazon-cloudwatch-observability"
+  resolve_conflicts_on_create = "OVERWRITE"
 
-# Access key for CLI/API access
-resource "aws_iam_access_key" "dev_view" {
-  user = aws_iam_user.dev_view.name
+  tags = {
+    Name = "${var.cluster_name}-cloudwatch-addon"
+  }
 }
