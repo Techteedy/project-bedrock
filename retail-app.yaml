@@ -1,0 +1,4 @@
+# Retail Store Sample App Deployment
+# Official AWS retail store sample app
+# Deploy command:
+# kubectl apply -f https://github.com/aws-containers/retail-store-sample-app/releases/latest/download/kubernetes.yaml -n retail-app
