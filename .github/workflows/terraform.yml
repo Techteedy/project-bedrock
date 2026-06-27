@@ -28,15 +28,12 @@ jobs:
           aws-region: us-east-1
 
       - name: Terraform Init
-        working-directory: terraform
         run: terraform init
 
       - name: Terraform Plan
-        working-directory: terraform
         run: terraform plan
         if: github.event_name == 'pull_request'
 
       - name: Terraform Apply
-        working-directory: terraform
         run: terraform apply -auto-approve
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
