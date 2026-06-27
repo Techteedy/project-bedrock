@@ -12,9 +12,6 @@ jobs:
   terraform:
     name: Terraform
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: .
 
     steps:
       - name: Checkout code
@@ -35,8 +32,3 @@ jobs:
 
       - name: Terraform Plan
         run: terraform plan
-        if: github.event_name == 'pull_request'
-
-      - name: Terraform Apply
-        run: terraform apply -auto-approve
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
